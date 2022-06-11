@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="kr.or.easybusy.works.list.dao.WorksListDAO">
+	<resultMap type="WorksBoardVO" id="WorksBoardMap" autoMapping="true">
+		<id property="wbNo" column="BOARD_NO"/>
+		<collection property="listList" ofType="ListVO" autoMapping="true">
+			<id property="wlNo" column="LISTNO"/>
+			<collection property="cardList" ofType="CardVO" autoMapping="true">
+				<id property="wcNo" column="CARDNO"/>
+				<result property="wbNo" column="CARD_BOARDNO"/>
+			</collection>
+		</collection>
+	</resultMap>
+
+<select id="selectWorksList" parameterType="WorksBoardVO" resultMap="WorksBoardMap">
+WITH CARDS AS (
+    SELECT
+        WC_NO       ,WORKS_CARD.WL_NO       ,WC_PREVNO       ,WC_TITLE    
+       ,WC_START       ,WC_END       ,WC_PLACE       ,WC_URL       ,WC_REALEND ,WC_DESC
+    FROM
+        WORKS_CARD
+),LISTS AS (
+    SELECT
+        B.WL_NO "LISTNO"       ,WB_NO       ,WL_TITLE      ,WL_ORDER       ,WC_NO       ,WC_PREVNO
+       ,WC_TITLE             ,WC_START       ,WC_END       ,WC_PLACE       ,WC_URL       
+       ,WC_REALEND ,WC_DESC ,WL_CSS 
+      , (SELECT    LISTAGG(WL_NO,',') WITHIN GROUP(ORDER BY WL_NO )
+            FROM
+                WORKS_LIST A
+            WHERE
+                A.WL_NO != B.WL_NO 
+            and 
+                WB_NO = #{wbNo})  DRAG_TEMP
+    FROM
+        WORKS_LIST B
+        LEFT JOIN CARDS ON ( B.WL_NO = CARDS.WL_NO )
+) SELECT
+     WL_ORDER   ,WC_NO"CARDNO"  ,WC_PREVNO   ,WC_TITLE  ,A.WB_NO"BOARD_NO"   ,B.EMP_NO   ,WB_TITLE  ,WB_CLASS   
+     ,OPEN_YN   ,COM_NO   ,NVL2(B.WB_NO,'Y','N') AS BOARD_LIKE
+   ,LISTS."LISTNO"   ,WL_TITLE       ,WC_START   ,WC_END ,WL_CSS 
+   ,WC_PLACE   ,WC_URL   ,WC_REALEND  ,WC_DESC ,DRAG_TEMP 
+  FROM
+    WORKS_BOARD A
+    LEFT OUTER JOIN WORKS_LIKE B ON ( A.WB_NO = B.WB_NO
+                                      AND B.EMP_NO = #{empNo} )
+    INNER JOIN LISTS ON ( A.WB_NO = LISTS.WB_NO )
+                        AND A.WB_NO = #{wbNo}
+    START WITH WC_PREVNO IS NULL
+    CONNECT BY PRIOR WC_NO = WC_PREVNO
+    ORDER SIBLINGS BY WL_ORDER
+   </select>
+	
+	<select id="selectWorksOnlyList" parameterType="int" resultType="ListVO">
+		SELECT
+			    wl_no		   ,wb_no		   ,wl_title		   ,wl_order
+		FROM
+		    works_list 
+		WHERE 
+			wb_no = #{wbNo}
+		ORDER BY 
+			wl_order ASC
+	</select>
+	
+	<select id="updateCardPosition" parameterType="map" statementType="CALLABLE">
+		{
+			CALL UPDATE_CARDPOSITION (
+				#{beforePrevSilblingId,mode=IN,jdbcType=NUMERIC}
+			   ,#{beforeNextSiblingId,mode=IN,jdbcType=NUMERIC}			
+			   ,#{targetId,mode=IN,jdbcType=NUMERIC}			
+			   ,#{afterPrevSiblingId,mode=IN,jdbcType=NUMERIC}			
+			   ,#{afterNextSiblingId,mode=IN,jdbcType=NUMERIC}			
+			   ,#{targetRefNo,mode=IN,jdbcType=NUMERIC}			
+			   ,#{rowcnt,mode=OUT,jdbcType=NUMERIC,javaType=java.lang.Integer}	
+			)
+		}
+	</select>
+	
+	<select id="updateListPosition" parameterType="map" statementType="CALLABLE" resultType="int">
+		{
+			CALL UPDATE_LISTPOSITION (
+				#{beforeListOrderNo,mode=IN,jdbcType=NUMERIC}
+			   ,#{afterListOrderNo,mode=IN,jdbcType=NUMERIC}			
+			   ,#{targetListId,mode=IN,jdbcType=NUMERIC}			
+			   ,#{wbNo,mode=IN,jdbcType=NUMERIC}			
+			   ,#{rowcnt,mode=OUT,jdbcType=NUMERIC,javaType=java.lang.Integer}	
+			)
+		}
+	</select>
+	
+	<update id="updateCardListNo" parameterType="map">
+		UPDATE WORKS_CARD
+		SET WL_NO = #{afterListId}
+		WHERE 
+			WC_NO = #{targetId}
+	</update>
+	
+	<update id="updateListTitle" parameterType="ListVO">
+		UPDATE works_list
+		SET wl_title = #{wlTitle}
+		WHERE wl_no = #{wlNo}
+	</update>
+
+	<insert id="insertWorksList" parameterType="ListVO">
+	<selectKey order="BEFORE" keyColumn="wl_no" keyProperty="wlNo" resultType="int">
+		SELECT
+			WL_NO_SEQ.NEXTVAL wl_no
+		FROM
+			DUAL
+	</selectKey>
+		INSERT INTO works_list (
+		    wl_no
+		   ,wb_no
+		   ,wl_title
+		   ,wl_order
+		   ,wl_css
+		)
+		select 
+		   #{wlNo}
+		   ,#{wbNo} wb_no
+		   ,#{wlTitle} wl_title
+		   ,nvl(max(WL_ORDER),0)+1 wl_order
+		   ,'' wl_css
+		 from works_list
+		 where wb_no = #{wbNo}
+	</insert>
+	
+	<select id="selectWorksListAfterInsert" parameterType="ListVO" resultType="ListVO">
+		 SELECT
+		    wl_no
+		   ,wb_no
+		   ,wl_title
+		   ,wl_order
+		   ,wl_css
+		   ,(SELECT    LISTAGG(WL_NO,',') WITHIN GROUP(ORDER BY WL_NO )
+            FROM
+                WORKS_LIST A
+            WHERE
+                A.WL_NO != B.WL_NO ) DRAG_TEMP
+		FROM
+		    works_list B
+		WHERE 
+			wl_no = #{wlNo}
+	</select>
+
+	<delete id="deleteBoard" parameterType="Integer">
+		DELETE FROM works_board
+		WHERE	wb_no = #{wbNo}
+		
+	</delete>
+
+
+</mapper>

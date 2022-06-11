@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="kr.or.easybusy.works.card.dao.WorksCardDAO">
+	<resultMap type="CardVO" id="cardMap" autoMapping="true">
+		<id property="wcNo" column="wc_no in CARD"/>
+		<collection property="replyList" ofType="CardReplyVO" autoMapping="true">
+			<id property="wrNo" column="WR_NO"/>
+		</collection>
+		<collection property="attatchList" ofType="CardAttatchVO" autoMapping="true">
+			<id property="waNo" column="WA_NO"/>
+		</collection>
+		<collection property="checkList" ofType="CardCheckList" autoMapping="true">
+			<id property="wckNo" column="WCK_NO"/>
+			<collection property="checkItemList" ofType="CheckItemVO" autoMapping="true">
+				<id property="wckCntNo" column="wck_cnt_no"/>
+				<result property="wckNo" column="wck_no in CHK_CONT"/>
+			</collection>
+		</collection>
+	</resultMap>
+	<select id="selectCard" parameterType="CardVO" resultMap="cardMap">
+		WITH
+CARD_WBNO AS(
+ SELECT WB_NO AS "WB_NO" ,WL_NO FROM WORKS_LIST
+)
+,EMPINFO AS(
+    SELECT emp_no "emp_no in emp", emp_name
+    FROM EMPLOYEE
+    
+),REPLYS AS(
+    SELECT
+        wr_no        ,wc_no        ,emp_no        ,wr_content        ,wr_date
+        ,wr_del ,emp_name
+   FROM
+       works_reply inner join EMPINFO ON(works_reply.emp_no = EMPINFO."emp_no in emp") 
+),CHK_CONT AS
+(
+ SELECT
+        wck_no "wck_no in CHK_CONT"   ,wck_cnt_title     ,wck_cnt_done    ,wck_cnt_no
+    FROM
+        works_check_content
+),CHK_LIST AS(
+    SELECT
+     wck_no    ,wc_no "wc_no in CHK_LIST"    ,wck_title
+        , wck_no "wck_no in CHK_CONT" 
+        ,wck_cnt_title    
+        ,wck_cnt_done    
+        ,wck_cnt_no
+    FROM
+        works_chk wc LEFT OUTER JOIN CHK_CONT ON (wc.wck_no = CHK_CONT."wck_no in CHK_CONT")
+), ATTLIST AS(
+    SELECT
+     wa_no    ,wc_no "wc_no in cardAtt"   ,wa_filename    ,wa_savename    ,wa_mime    ,wa_filesize    ,wa_fancysize
+    FROM
+        works_attatch
+
+)
+SELECT    a.wc_no "wc_no in CARD" ,wc_title   ,wc_start, A.wl_no
+    ,wc_end    ,wc_place    ,wc_url    ,wc_realend    ,wc_desc , wc_done
+    
+     ,wc_no "wc_no in CHK_LIST"    ,wck_title     ,wck_no   
+     
+    , wck_no "wck_no in CHK_CONT" 
+    ,wck_cnt_title    
+    ,wck_cnt_done    
+    ,wck_cnt_no
+    
+    ,REPLYS.WC_NO "wc_no in REPLY"
+    ,CHK_LIST."wc_no in CHK_LIST"
+    ,wr_no      ,REPLYS.emp_no    ,replys.emp_name     ,wr_content   ,wr_date
+    ,wr_del
+    
+    ,nvl2(
+        b.wc_no,'Y','N'
+    )AS "card_like"
+    ,CARD_WBNO."WB_NO" as "WB_NO"
+    
+    ,wa_no    ,wc_no "wc_no in cardAtt"  
+    ,wa_filename    ,wa_savename 
+    ,wa_mime    ,wa_filesize    ,wa_fancysize
+    
+    
+FROM
+    works_card A LEFT JOIN WORKS_CARD_LIKE B ON(A.WC_NO = B.WC_NO) 
+    LEFT JOIN CARD_WBNO ON(A.WL_NO = CARD_WBNO.WL_NO) 
+    LEFT JOIN ATTLIST ON (A.WC_NO = ATTLIST."wc_no in cardAtt")
+    LEFT OUTER JOIN REPLYS ON(A.WC_NO = REPLYS.WC_NO)
+    LEFT OUTER JOIN CHK_LIST ON(A.WC_NO = CHK_LIST."wc_no in CHK_LIST")
+
+WHERE A.WC_NO = #{wcNo}
+ORDER BY replys.wr_date desc
+	</select>
+	
+	<insert id="insertCard" parameterType="CardVO">
+		<selectKey order="BEFORE" keyColumn="wc_no" keyProperty="wcNo" resultType="int">
+			select 
+				wc_no_seq.nextval wc_no
+			from dual
+		</selectKey>
+		INSERT INTO works_card (
+		    wc_no
+		   ,wl_no
+		   ,wc_prevno
+		   ,wc_title
+		) VALUES (
+		    #{wcNo}
+		   ,#{wlNo}
+		   ,#{wcPrevno}
+		   ,#{wcTitle}
+		)
+	</insert>
+	
+	<select id="insertedCard" parameterType="CardVO" resultType="CardVO">
+		SELECT
+			wc_no
+			,wl_no
+			,wc_prevno
+			,wc_title
+		FROM
+			works_card
+			where
+			wc_no = #{wcNo}
+	</select>
+		
+	
+	<update id="updateCardDesc" parameterType="CardVO">
+		UPDATE works_card
+		SET
+		   wc_desc= #{wcDesc}
+		WHERE
+		   wc_no = #{wcNo}	
+	</update>
+	
+	<update id="updateReply" parameterType="CardReplyVO">
+		 UPDATE works_reply
+		    SET
+		        wr_content = #{wrContent}
+			WHERE
+			    wr_no = #{wrNo}
+	</update>
+	<delete id="deleteReply" parameterType="CardReplyVO">
+		DELETE FROM works_reply 
+        WHERE wr_no = #{wrNo} 
+	</delete>
+	<insert id="insertReply" parameterType="CardReplyVO">
+		<selectKey order="BEFORE" keyColumn="wr_no" keyProperty="wrNo" resultType="int">
+			select 
+				wr_no_seq.nextval wr_no
+			from dual
+		</selectKey>
+		 INSERT INTO works_reply (
+            wr_no
+           ,wc_no
+           ,emp_no
+           ,wr_content
+           ,wr_date
+           ,wr_del
+        ) VALUES (
+            #{wrNo}
+           ,#{wcNo}
+           ,#{empNo}
+           ,#{wrContent}
+           ,to_char(sysdate,'yyyy-mm-dd hh24:mi:ss')
+           ,0
+        )
+	</insert>
+	<select id="selectInsertedReply" parameterType="CardReplyVO" resultType="CardReplyVO">
+	  WITH  EMPINFO AS(
+		    SELECT emp_no "emp_no in emp", emp_name
+		    FROM EMPLOYEE
+	)SELECT
+	        wr_no        ,wc_no        ,emp_no        ,wr_content        ,wr_date
+	        ,wr_del ,emp_name
+	   FROM
+	       works_reply inner join EMPINFO ON(works_reply.emp_no = EMPINFO."emp_no in emp") 
+	 	WHERE 
+	 		wr_no = #{wrNo}
+	</select>
+	
+	<update id="updateCheckDone" parameterType="CheckItemVO">
+		UPDATE works_check_content
+		SET
+		   wck_cnt_done = #{wckCntDone}
+		WHERE
+		   wck_cnt_no = #{wckCntNo}	
+	</update>
+	<update id="updateCard">
+		UPDATE works_card
+			SET
+			    wc_title = #{wcTitle}
+			    ,wc_desc = #{wcDesc}
+			    ,wc_done = #{wcDone}
+			    ,wc_start= #{wcStart}
+			    ,wc_end  = #{wcEnd}
+			WHERE
+				wc_no = #{wcNo}
+	</update>
+	
+<!-- 	<update id="updateCheckcItem" parameterType="CheckItemVO">	 -->
+<!-- 		UPDATE works_check_content -->
+<!-- 		SET -->
+<!-- 		   wck_cnt_title = #{wckCntTitle}, -->
+<!-- 		   wck_cnt_done = #{wckCntDone} -->
+<!-- 		WHERE -->
+<!-- 		   wck_cnt_no = #{wckCntNo}	 -->
+	
+<!-- 	</update> -->
+	<delete id="deleteCheckItem" parameterType="CheckItemVO">
+		DELETE FROM works_check_content 
+        WHERE wck_cnt_no = #{wckCntNo} 
+	</delete>
+	
+	<insert id="insertCheckItem" parameterType="CheckItemVO">
+		<selectKey order="BEFORE" keyProperty="wckCntNo" keyColumn="wck_cnt_no" resultType="int">
+			select 
+				nvl(max(wck_cnt_no),0)+1 wck_cnt_no
+			from
+				works_check_content
+		</selectKey>
+
+		INSERT INTO works_check_content(
+			wck_no
+			,wck_cnt_title
+			,wck_cnt_done
+			,wck_cnt_no
+		)VALUES(
+			#{wckNo}
+			,#{wckCntTitle}
+			,'N'
+			,#{wckCntNo}
+		)
+	</insert>
+	<select id="insertedCheckItem" parameterType="CheckItemVO" resultType="CheckItemVO">
+		SELECT
+		    wck_no
+		    ,wck_cnt_title
+		    ,wck_cnt_done
+		    ,wck_cnt_no
+		FROM
+		    works_check_content
+		where
+		    wck_cnt_no = #{wckCntNo}
+	 </select>
+	 
+	 <!-- 체크리스트 등록 수정 삭제         START ================  -->
+	<update id="updateCheckList">
+		UPDATE works_chk
+			SET
+			   wck_title = #{wcTitle}
+			WHERE
+			   wck_no = #{wckNo}	
+	</update>	 
+	
+	<insert id="insertCheckList" parameterType="CardCheckList">
+		<selectKey order="BEFORE" keyProperty="wckNo" keyColumn="wck_no" resultType="int">
+			select 
+				wck_no_seq.nextval wck_no
+			from
+				dual
+		</selectKey>
+		INSERT INTO works_chk(
+		    wck_no
+		    ,wc_no
+		    ,wck_title
+		)VALUES(
+		    #{wckNo}
+		    ,#{wcNo}
+		    ,#{wckTitle} 
+		)		
+	</insert>
+	
+	<delete id="deleteCheckList" parameterType="CardCheckList">
+		DELETE FROM works_chk 
+        WHERE wck_no = #{wckNo} 
+	</delete> 
+	 
+	<select id="selectInsertedCheckList" parameterType="CardCheckList" resultType="CardCheckList">
+		SELECT
+		    wck_no
+		    ,wc_no
+		    ,wck_title
+		FROM
+		    works_chk
+		WHERE
+			wck_no = #{wckNo}
+	 </select>
+	 
+	 <delete id="deleteItemsUnderList" parameterType="CardCheckList">
+	 	DELETE FROM works_check_content 
+        WHERE wck_no = #{wckNo} 
+	 
+	 </delete>
+
+	
+	
+	 <!-- 체크리스트 등록 수정 삭제        END  ================  -->
+	
+</mapper>
