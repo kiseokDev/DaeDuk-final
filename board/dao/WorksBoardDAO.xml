@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="kr.or.easybusy.works.board.dao.WorksBoardDAO">
+	<select id="selectWorksBoardList" resultType="WorksBoardVO" parameterType="PathVO">
+		SELECT
+	          A.WB_NO     ,COM_NO    ,WB_TITLE    ,WB_CLASS
+	          ,OPEN_YN  , NVL2(B.WB_NO,'Y','N') AS BOARD_LIKE
+     	 FROM
+         	 WORKS_BOARD A LEFT OUTER JOIN  WORKS_LIKE B ON (A.WB_NO = B.WB_NO AND B.EMP_NO = #{empNo})
+      WHERE COM_NO = #{comNo} AND OPEN_YN = #{openYn}
+      <include refid="searchFrag" />
+      ORDER BY A.ROWID DESC
+      
+	</select>
+	
+	<sql id="searchFrag">
+		<if test="openYn eq 'private'">
+			and A.emp_no = #{empNo}
+		</if>
+    	<if test="wbClass neq null and @org.apache.commons.lang3.StringUtils@isNotBlank(wbClass)">
+	    	<if test="wbClass eq 'none' ">
+	    		and wb_class is null
+	    	</if>
+	    	<if test="wbClass neq 'none' ">
+    			and wb_class = #{wbClass}
+	    	</if>
+    	</if>
+	</sql>
+	
+	<select id="selectClassList" resultType="hashmap" parameterType="int">
+		SELECT 
+		    DISTINCT(WB_CLASS) AS collection 
+		FROM 
+		    WORKS_BOARD
+		WHERE 
+		    COM_NO = #{data}
+		ORDER BY 1
+	</select>
+	
+	<update id="modifyLikeStatus" parameterType="WorksBoardVO">
+		<if test='boardLike.equals("Y")'>
+		DELETE FROM 
+			    WORKS_LIKE
+			WHERE 
+			    WB_NO = #{wbNo}
+	    </if>
+		<if test='boardLike eq "N"'>
+			INSERT INTO WORKS_LIKE(
+			    WB_NO
+			    ,EMP_NO
+			  )VALUES(
+			  #{wbNo,jdbcType=NUMERIC}
+			  ,#{empNo,jdbcType=NUMERIC}
+			 )
+		</if>
+	</update>
+	
+	<insert id="insertWorksBoard" parameterType="WorksBoardVO">
+		<selectKey order="BEFORE" keyColumn="wb_no" keyProperty="wbNo" resultType="int">
+		SELECT 
+			WB_NO_SEQ.NEXTVAL wb_no
+		FROM 
+			DUAL
+		</selectKey>
+		INSERT INTO works_board (
+		    wb_no
+		    ,emp_no
+		    ,wb_title
+		    ,wb_class
+		    ,open_yn
+		    ,com_no
+		) VALUES (
+			#{wbNo,jdbcType=NUMERIC}
+			,#{empNo,jdbcType=NUMERIC}
+			,#{wbTitle,jdbcType=VARCHAR}
+			,#{wbClass,jdbcType=VARCHAR}
+			,#{openYn,jdbcType=VARCHAR}
+			,#{comNo,jdbcType=NUMERIC}
+		)
+	</insert>
+	
+	<insert id="insertWorksAdminDefault" parameterType="WorksBoardVO">
+		INSERT INTO works_admin(
+			    wb_no
+			    ,emp_no
+			    ,emp_name
+			    ,wa_type
+			)
+	    SELECT
+	        #{wbNo} wb_no
+	        , emp_no
+	        , emp_name
+	        , '3' wa_type
+	    FROM
+	        employee
+	    WHERE
+	         COM_NO = #{comNo}
+	    AND 
+	    	EMP_NO != #{empNo}
+	</insert>
+	
+	<insert id="insertWorksAdminCreator" parameterType="WorksBoardVO">
+		INSERT INTO
+			 works_admin(
+			     wb_no
+			    ,emp_no
+			    ,emp_name
+			    ,wa_type
+			)
+			SELECT
+		        #{wbNo} wb_no
+		        , emp_no
+		        , emp_name
+		        , '1' wa_type
+			    FROM
+			        employee
+			    WHERE
+			    	EMP_NO = #{empNo}
+	</insert>
+	
+	
+	
+	<update id="updateWorksBoard" parameterType="WorksBoardVO">
+		UPDATE works_board
+		SET wb_title = #{wbTitle}
+		WHERE wb_no = #{wbNo}
+	</update>
+</mapper>
